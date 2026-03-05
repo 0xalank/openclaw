@@ -35,6 +35,11 @@
       "title": "Process",
       "detailKeys": ["sessionId"]
     },
+    "calculator": {
+      "emoji": "🧮",
+      "title": "Calculator",
+      "detailKeys": ["expression"]
+    },
     "read": {
       "emoji": "📖",
       "title": "Read",
@@ -303,6 +308,11 @@
       "emoji": "📄",
       "title": "Web Fetch",
       "detailKeys": ["url", "extractMode", "maxChars"]
+    },
+    "weather": {
+      "emoji": "🌤️",
+      "title": "Weather",
+      "detailKeys": ["location", "units", "days"]
     },
     "whatsapp_login": {
       "emoji": "🟢",

@@ -1,0 +1,1 @@
+/Users/nova/agent/openclaw/package.json

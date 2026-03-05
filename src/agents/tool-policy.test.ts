@@ -63,11 +63,13 @@ describe("tool-policy", () => {
 
   it("includes core tool groups in group:openclaw", () => {
     const group = TOOL_GROUPS["group:openclaw"];
+    expect(group).toContain("calculator");
     expect(group).toContain("browser");
     expect(group).toContain("message");
     expect(group).toContain("subagents");
     expect(group).toContain("session_status");
     expect(group).toContain("tts");
+    expect(group).toContain("weather");
   });
 
   it("normalizes tool names and aliases", () => {

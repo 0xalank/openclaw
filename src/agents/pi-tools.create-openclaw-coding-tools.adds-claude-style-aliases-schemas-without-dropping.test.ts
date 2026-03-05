@@ -294,6 +294,7 @@ describe("createOpenClawCodingTools", () => {
   it("keeps raw core tool schemas union-free", () => {
     const tools = createOpenClawTools();
     const coreTools = new Set([
+      "calculator",
       "browser",
       "canvas",
       "nodes",
@@ -307,6 +308,7 @@ describe("createOpenClawCodingTools", () => {
       "sessions_spawn",
       "subagents",
       "session_status",
+      "weather",
       "image",
     ]);
     expect(findUnionKeywordOffenders(tools, { onlyNames: coreTools })).toEqual([]);
