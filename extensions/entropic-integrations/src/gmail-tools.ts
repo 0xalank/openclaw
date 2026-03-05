@@ -1,6 +1,6 @@
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import { Type } from "@sinclair/typebox";
 import { Buffer } from "node:buffer";
+import { Type } from "@sinclair/typebox";
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { getGoogleAccessToken } from "./google.js";
 
 const GMAIL_API_BASE = "https://gmail.googleapis.com/gmail/v1/users/me";
@@ -63,6 +63,7 @@ async function gmailFetch<T>(path: string, token: string, init?: RequestInit): P
 export function createGmailSearchTool(_api: OpenClawPluginApi) {
   return {
     name: "gmail_search",
+    label: "Gmail Search",
     description: "Search Gmail messages using Gmail query syntax.",
     parameters: Type.Object({
       query: Type.Optional(
@@ -112,6 +113,7 @@ export function createGmailSearchTool(_api: OpenClawPluginApi) {
 export function createGmailGetTool(_api: OpenClawPluginApi) {
   return {
     name: "gmail_get",
+    label: "Gmail Get",
     description: "Fetch a Gmail message by id.",
     parameters: Type.Object({
       id: Type.String({ description: "Gmail message id." }),
@@ -136,6 +138,7 @@ export function createGmailGetTool(_api: OpenClawPluginApi) {
 export function createGmailSendTool(_api: OpenClawPluginApi) {
   return {
     name: "gmail_send",
+    label: "Gmail Send",
     description: "Send an email via Gmail.",
     parameters: Type.Object({
       to: Type.Union([Type.String(), Type.Array(Type.String())], {
@@ -195,6 +198,73 @@ export function createGmailSendTool(_api: OpenClawPluginApi) {
       });
 
       return jsonResult({ id: result.id, threadId: result.threadId, status: "sent" });
+    },
+  };
+}
+
+export function createGmailDraftTool(_api: OpenClawPluginApi) {
+  return {
+    name: "gmail_draft",
+    label: "Gmail Draft",
+    description: "Create an email draft in Gmail (saves without sending).",
+    parameters: Type.Object({
+      to: Type.Union([Type.String(), Type.Array(Type.String())], {
+        description: "Recipient email(s).",
+      }),
+      subject: Type.String({ description: "Email subject." }),
+      body: Type.String({ description: "Email body (plain text)." }),
+      cc: Type.Optional(Type.Union([Type.String(), Type.Array(Type.String())])),
+      bcc: Type.Optional(Type.Union([Type.String(), Type.Array(Type.String())])),
+    }),
+    async execute(_id: string, params: Record<string, unknown>) {
+      const toRaw = params.to;
+      const subject = readString(params, "subject");
+      const body = readString(params, "body");
+      if (!subject || !body) throw new Error("subject and body required");
+
+      const normalizeList = (value: unknown): string[] => {
+        if (Array.isArray(value)) {
+          return value
+            .filter((v) => typeof v === "string")
+            .map((v) => v.trim())
+            .filter(Boolean);
+        }
+        if (typeof value === "string") {
+          const trimmed = value.trim();
+          return trimmed ? [trimmed] : [];
+        }
+        return [];
+      };
+
+      const to = normalizeList(toRaw);
+      if (to.length === 0) throw new Error("to required");
+      const cc = normalizeList(params.cc);
+      const bcc = normalizeList(params.bcc);
+
+      const lines = [
+        `To: ${to.join(", ")}`,
+        cc.length ? `Cc: ${cc.join(", ")}` : "",
+        bcc.length ? `Bcc: ${bcc.join(", ")}` : "",
+        `Subject: ${encodeHeader(subject)}`,
+        "Content-Type: text/plain; charset=utf-8",
+        "",
+        body,
+      ].filter(Boolean);
+
+      const rawEmail = lines.join("\r\n");
+      const encodedEmail = Buffer.from(rawEmail, "utf8")
+        .toString("base64")
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=+$/, "");
+
+      const token = await getGoogleAccessToken("google_email");
+      const result = await gmailFetch<any>("drafts", token, {
+        method: "POST",
+        body: JSON.stringify({ message: { raw: encodedEmail } }),
+      });
+
+      return jsonResult({ id: result.id, draftId: result.id, status: "draft_created" });
     },
   };
 }

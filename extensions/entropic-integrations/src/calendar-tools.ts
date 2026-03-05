@@ -1,5 +1,5 @@
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { Type } from "@sinclair/typebox";
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { getGoogleAccessToken } from "./google.js";
 
 const CALENDAR_API_BASE = "https://www.googleapis.com/calendar/v3/calendars/primary";
@@ -56,6 +56,7 @@ async function calendarFetch<T>(path: string, token: string, init?: RequestInit)
 export function createCalendarListTool(_api: OpenClawPluginApi) {
   return {
     name: "calendar_list",
+    label: "Calendar List",
     description: "List upcoming Google Calendar events.",
     parameters: Type.Object({
       timeMin: Type.Optional(Type.String({ description: "Start time ISO8601." })),
@@ -97,6 +98,7 @@ export function createCalendarListTool(_api: OpenClawPluginApi) {
 export function createCalendarCreateTool(_api: OpenClawPluginApi) {
   return {
     name: "calendar_create",
+    label: "Calendar Create",
     description: "Create a Google Calendar event.",
     parameters: Type.Object({
       summary: Type.String({ description: "Event summary/title." }),
