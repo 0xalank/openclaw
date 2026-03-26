@@ -366,6 +366,71 @@ async function collectStreamEvents<T>(stream: AsyncIterable<T>): Promise<T[]> {
 }
 
 describe("createOllamaStreamFn", () => {
+  it("emits start and text streaming events before the final done event", async () => {
+    await withMockNdjsonFetch(
+      [
+        '{"model":"m","created_at":"t","message":{"role":"assistant","content":"Hel"},"done":false}',
+        '{"model":"m","created_at":"t","message":{"role":"assistant","content":"lo"},"done":false}',
+        '{"model":"m","created_at":"t","message":{"role":"assistant","content":""},"done":true,"prompt_eval_count":1,"eval_count":1}',
+      ],
+      async () => {
+        const stream = await createOllamaTestStream({
+          baseUrl: "http://ollama-host:11434",
+        });
+
+        const events = await collectStreamEvents(stream);
+        expect(events.map((event) => event.type)).toEqual([
+          "start",
+          "text_start",
+          "text_delta",
+          "text_delta",
+          "text_end",
+          "done",
+        ]);
+
+        const textDeltas = events
+          .filter(
+            (event): event is { type: "text_delta"; delta: string } => event.type === "text_delta",
+          )
+          .map((event) => event.delta);
+        expect(textDeltas).toEqual(["Hel", "lo"]);
+      },
+    );
+  });
+
+  it("emits native thinking events for Ollama reasoning chunks", async () => {
+    await withMockNdjsonFetch(
+      [
+        '{"model":"m","created_at":"t","message":{"role":"assistant","content":"","thinking":"Checking files"},"done":false}',
+        '{"model":"m","created_at":"t","message":{"role":"assistant","content":"Done"},"done":false}',
+        '{"model":"m","created_at":"t","message":{"role":"assistant","content":""},"done":true,"prompt_eval_count":1,"eval_count":1}',
+      ],
+      async () => {
+        const stream = await createOllamaTestStream({
+          baseUrl: "http://ollama-host:11434",
+        });
+
+        const events = await collectStreamEvents(stream);
+        expect(events.map((event) => event.type)).toEqual([
+          "start",
+          "thinking_start",
+          "thinking_delta",
+          "text_start",
+          "text_delta",
+          "thinking_end",
+          "text_end",
+          "done",
+        ]);
+
+        const thinkingDelta = events.find(
+          (event): event is { type: "thinking_delta"; delta: string } =>
+            event.type === "thinking_delta",
+        );
+        expect(thinkingDelta?.delta).toBe("Checking files");
+      },
+    );
+  });
+
   it("normalizes /v1 baseUrl and maps maxTokens + signal", async () => {
     await withMockNdjsonFetch(
       [

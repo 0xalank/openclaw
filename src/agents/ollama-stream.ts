@@ -13,6 +13,7 @@ import { isNonSecretApiKeyMarker } from "./model-auth-markers.js";
 import { OLLAMA_DEFAULT_BASE_URL } from "./ollama-defaults.js";
 import {
   buildAssistantMessage as buildStreamAssistantMessage,
+  buildAssistantMessageWithZeroUsage,
   buildStreamErrorAssistantMessage,
   buildUsageWithNoCost,
 } from "./stream-message-shared.js";
@@ -439,6 +440,11 @@ export function createOllamaStreamFn(
 
   return (model, context, options) => {
     const stream = createAssistantMessageEventStream();
+    const modelInfo = {
+      api: model.api,
+      provider: model.provider,
+      id: model.id,
+    };
 
     const run = async () => {
       try {
@@ -479,6 +485,27 @@ export function createOllamaStreamFn(
           headers.Authorization = `Bearer ${options.apiKey}`;
         }
 
+        let accumulatedContent = "";
+        let accumulatedThinking = "";
+        const buildPartialAssistantMessage = () =>
+          buildAssistantMessageWithZeroUsage({
+            model: modelInfo,
+            content: [
+              ...(accumulatedThinking
+                ? ([{ type: "thinking", thinking: accumulatedThinking }] as const)
+                : []),
+              ...(accumulatedContent
+                ? ([{ type: "text", text: accumulatedContent }] as const)
+                : []),
+            ],
+            stopReason: "stop",
+          });
+
+        stream.push({
+          type: "start",
+          partial: buildPartialAssistantMessage(),
+        });
+
         const response = await fetch(chatUrl, {
           method: "POST",
           headers,
@@ -496,13 +523,48 @@ export function createOllamaStreamFn(
         }
 
         const reader = response.body.getReader();
-        let accumulatedContent = "";
         const accumulatedToolCalls: OllamaToolCall[] = [];
         let finalResponse: OllamaChatResponse | undefined;
+        let thinkingStarted = false;
+        let textStarted = false;
 
         for await (const chunk of parseNdjsonStream(reader)) {
+          const thinkingDelta = chunk.message?.thinking ?? chunk.message?.reasoning ?? "";
+          if (thinkingDelta) {
+            accumulatedThinking += thinkingDelta;
+            if (!thinkingStarted) {
+              thinkingStarted = true;
+              stream.push({
+                type: "thinking_start",
+                contentIndex: 0,
+                partial: buildPartialAssistantMessage(),
+              });
+            }
+            stream.push({
+              type: "thinking_delta",
+              contentIndex: 0,
+              delta: thinkingDelta,
+              partial: buildPartialAssistantMessage(),
+            });
+          }
+
           if (chunk.message?.content) {
             accumulatedContent += chunk.message.content;
+            const textContentIndex = accumulatedThinking ? 1 : 0;
+            if (!textStarted) {
+              textStarted = true;
+              stream.push({
+                type: "text_start",
+                contentIndex: textContentIndex,
+                partial: buildPartialAssistantMessage(),
+              });
+            }
+            stream.push({
+              type: "text_delta",
+              contentIndex: textContentIndex,
+              delta: chunk.message.content,
+              partial: buildPartialAssistantMessage(),
+            });
           }
 
           // Ollama sends tool_calls in intermediate (done:false) chunks,
@@ -527,13 +589,31 @@ export function createOllamaStreamFn(
         }
 
         const assistantMessage = buildAssistantMessage(finalResponse, {
-          api: model.api,
-          provider: model.provider,
-          id: model.id,
+          api: modelInfo.api,
+          provider: modelInfo.provider,
+          id: modelInfo.id,
         });
 
         const reason: Extract<StopReason, "stop" | "length" | "toolUse"> =
           assistantMessage.stopReason === "toolUse" ? "toolUse" : "stop";
+
+        if (thinkingStarted) {
+          stream.push({
+            type: "thinking_end",
+            contentIndex: 0,
+            content: accumulatedThinking,
+            partial: buildPartialAssistantMessage(),
+          });
+        }
+
+        if (textStarted) {
+          stream.push({
+            type: "text_end",
+            contentIndex: accumulatedThinking ? 1 : 0,
+            content: accumulatedContent,
+            partial: buildPartialAssistantMessage(),
+          });
+        }
 
         stream.push({
           type: "done",

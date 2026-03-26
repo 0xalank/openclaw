@@ -10,6 +10,7 @@ import {
 import { resolveHeartbeatPrompt } from "../../../auto-reply/heartbeat.js";
 import { resolveChannelCapabilities } from "../../../config/channel-capabilities.js";
 import type { OpenClawConfig } from "../../../config/config.js";
+import { emitAgentEvent } from "../../../infra/agent-events.js";
 import { getMachineDisplayName } from "../../../infra/machine-name.js";
 import {
   ensureGlobalUndiciEnvProxyDispatcher,
@@ -2504,6 +2505,31 @@ export async function runEmbeddedAttempt(
                 `provider=${params.provider}/${params.modelId} sessionFile=${params.sessionFile}`,
             );
           }
+
+          const sessionSummary = summarizeSessionContext(activeSession.messages);
+          emitAgentEvent({
+            runId: params.runId,
+            stream: "diagnostic",
+            data: {
+              kind: "context",
+              sessionKey: params.sessionKey ?? params.sessionId,
+              provider: params.provider,
+              model: params.modelId,
+              disableTools: params.disableTools === true,
+              bootstrapContextMode: params.bootstrapContextMode ?? "full",
+              messageCount: activeSession.messages.length,
+              historyTextChars: sessionSummary.totalTextChars,
+              historyImageBlocks: sessionSummary.totalImageBlocks,
+              maxMessageTextChars: sessionSummary.maxMessageTextChars,
+              systemPromptChars: systemPromptReport.systemPrompt.chars,
+              promptChars: effectivePrompt.length,
+              toolCount: effectiveTools.length + (clientTools?.length ?? 0),
+              toolSchemaChars:
+                systemPromptReport.tools.listChars + systemPromptReport.tools.schemaChars,
+              skillsPromptChars: systemPromptReport.skills.promptChars,
+              numCtx: params.model.contextWindow ?? null,
+            },
+          });
 
           if (hookRunner?.hasHooks("llm_input")) {
             hookRunner

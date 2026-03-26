@@ -191,6 +191,38 @@ describe("gateway server chat", () => {
     });
   });
 
+  test("chat.send forwards disableTools and lightweight bootstrap options", async () => {
+    await withGatewayChatHarness(async ({ ws, createSessionDir }) => {
+      const spy = getReplyFromConfig;
+      await connectOk(ws);
+
+      await createSessionDir();
+      await writeMainSessionStore();
+      spy.mockClear();
+      let capturedOpts: GetReplyOptions | undefined;
+      spy.mockImplementationOnce(async (_ctx: unknown, opts?: GetReplyOptions) => {
+        capturedOpts = opts;
+        return undefined;
+      });
+
+      const sendRes = await rpcReq(ws, "chat.send", {
+        sessionKey: "main",
+        message: "hello",
+        idempotencyKey: "idem-local-fast-chat",
+        disableTools: true,
+        bootstrapContextMode: "lightweight",
+      });
+      expect(sendRes.ok).toBe(true);
+
+      await vi.waitFor(() => {
+        expect(spy.mock.calls.length).toBeGreaterThan(0);
+      }, FAST_WAIT_OPTS);
+
+      expect(capturedOpts?.disableTools).toBe(true);
+      expect(capturedOpts?.bootstrapContextMode).toBe("lightweight");
+    });
+  });
+
   test("chat.history hard-caps single oversized nested payloads", async () => {
     await withGatewayChatHarness(async ({ ws, createSessionDir }) => {
       const historyMaxBytes = 64 * 1024;

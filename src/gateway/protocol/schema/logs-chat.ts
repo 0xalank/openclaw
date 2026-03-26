@@ -36,6 +36,10 @@ export const ChatSendParamsSchema = Type.Object(
     sessionKey: ChatSendSessionKeyString,
     message: Type.String(),
     thinking: Type.Optional(Type.String()),
+    disableTools: Type.Optional(Type.Boolean()),
+    bootstrapContextMode: Type.Optional(
+      Type.Union([Type.Literal("full"), Type.Literal("lightweight")]),
+    ),
     deliver: Type.Optional(Type.Boolean()),
     attachments: Type.Optional(Type.Array(Type.Unknown())),
     timeoutMs: Type.Optional(Type.Integer({ minimum: 0 })),

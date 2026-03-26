@@ -43,6 +43,8 @@ export type GetReplyOptions = {
   heartbeatModelOverride?: string;
   /** Controls bootstrap workspace context injection (default: full). */
   bootstrapContextMode?: "full" | "lightweight";
+  /** If true, skip built-in tool schema injection for this run. */
+  disableTools?: boolean;
   /** If true, suppress tool error warning payloads for this run. */
   suppressToolErrorWarnings?: boolean;
   onPartialReply?: (payload: ReplyPayload) => Promise<void> | void;
