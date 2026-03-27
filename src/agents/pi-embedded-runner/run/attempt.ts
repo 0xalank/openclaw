@@ -1265,6 +1265,226 @@ export function resolvePromptModeForAttempt(params: {
   return resolvePromptModeForSession(params.sessionKey);
 }
 
+const LOCAL_MANAGED_LIGHTWEIGHT_WORKSPACE_TOOLS = new Set([
+  "read",
+  "write",
+  "edit",
+  "grep",
+  "find",
+  "ls",
+  "apply_patch",
+  "exec",
+  "process",
+]);
+
+const LOCAL_MANAGED_LIGHTWEIGHT_WEB_FETCH_TOOLS = new Set(["web_fetch"]);
+
+const LOCAL_MANAGED_LIGHTWEIGHT_WEB_SEARCH_TOOLS = new Set(["web_search"]);
+
+const LOCAL_MANAGED_LIGHTWEIGHT_BROWSER_TOOLS = new Set(["browser"]);
+
+const LOCAL_MANAGED_LIGHTWEIGHT_MESSAGE_TOOLS = new Set(["message"]);
+
+const LOCAL_MANAGED_LIGHTWEIGHT_SCHEDULE_TOOLS = new Set(["cron"]);
+
+const LOCAL_MANAGED_LIGHTWEIGHT_GATEWAY_TOOLS = new Set(["gateway"]);
+
+const LOCAL_MANAGED_LIGHTWEIGHT_SESSION_TOOLS = new Set([
+  "sessions_list",
+  "sessions_history",
+  "sessions_send",
+  "subagents",
+  "session_status",
+]);
+
+const LOCAL_MANAGED_LIGHTWEIGHT_DEVICE_TOOLS = new Set(["nodes"]);
+
+const LOCAL_MANAGED_LIGHTWEIGHT_CANVAS_TOOLS = new Set(["canvas"]);
+
+function hasNonEmptySecret(value: unknown): boolean {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+export function hasConfiguredWebSearchForManagedLocal(config?: OpenClawConfig): boolean {
+  const search = config?.tools?.web?.search;
+  if (!search || typeof search !== "object" || search.enabled === false) {
+    return false;
+  }
+
+  const provider =
+    typeof search.provider === "string" && search.provider.trim().length > 0
+      ? search.provider.trim().toLowerCase()
+      : "";
+
+  if (provider === "brave" || !provider) {
+    if (hasNonEmptySecret(search.apiKey) || hasNonEmptySecret(process.env.BRAVE_API_KEY)) {
+      return true;
+    }
+  }
+  if (provider === "gemini" || !provider) {
+    if (hasNonEmptySecret(search.gemini?.apiKey) || hasNonEmptySecret(process.env.GEMINI_API_KEY)) {
+      return true;
+    }
+  }
+  if (provider === "grok" || !provider) {
+    if (hasNonEmptySecret(search.grok?.apiKey) || hasNonEmptySecret(process.env.XAI_API_KEY)) {
+      return true;
+    }
+  }
+  if (provider === "kimi" || !provider) {
+    if (
+      hasNonEmptySecret(search.kimi?.apiKey) ||
+      hasNonEmptySecret(process.env.KIMI_API_KEY) ||
+      hasNonEmptySecret(process.env.MOONSHOT_API_KEY)
+    ) {
+      return true;
+    }
+  }
+  if (provider === "perplexity" || !provider) {
+    if (
+      hasNonEmptySecret(search.perplexity?.apiKey) ||
+      hasNonEmptySecret(process.env.PERPLEXITY_API_KEY) ||
+      hasNonEmptySecret(process.env.OPENROUTER_API_KEY)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function promptMentions(text: string, pattern: RegExp): boolean {
+  return pattern.test(text);
+}
+
+function resolveManagedLocalLightweightToolAllowlist(params: {
+  prompt?: string;
+  config?: OpenClawConfig;
+}): Set<string> {
+  const normalizedPrompt = (params.prompt || "").trim().toLowerCase();
+  const hasSearch = hasConfiguredWebSearchForManagedLocal(params.config);
+
+  const wantsWorkspaceTools = promptMentions(
+    normalizedPrompt,
+    /\b(code|coding|repo|repository|project|workspace|file|files|folder|directory|read|write|edit|patch|grep|find|ls|terminal|shell|command|script|scripts|build|run|test|tests|bug|fix|refactor|implement|compile)\b/,
+  );
+  const wantsWebContext =
+    promptMentions(
+      normalizedPrompt,
+      /\b(weather|forecast|temperature|current|latest|today|news|headline|price|prices|stock|stocks|score|scores|search|look up|lookup|online|web|website|site|article|page|docs|documentation)\b/,
+    ) || /https?:\/\//.test(normalizedPrompt);
+  const wantsBrowser =
+    promptMentions(
+      normalizedPrompt,
+      /\b(browser|playwright|chromium|chrome|open (?:the )?(?:site|page|browser)|navigate|click|login|log in|sign in|form|tab|tabs|screenshot|snapshot)\b/,
+    ) || /https?:\/\//.test(normalizedPrompt);
+  const wantsMessageTools = promptMentions(
+    normalizedPrompt,
+    /\b(send|message|text|email|reply|reply to|dm|notify|telegram|discord|slack|whatsapp)\b/,
+  );
+  const wantsScheduleTools = promptMentions(
+    normalizedPrompt,
+    /\b(remind|reminder|schedule|cron|later|tomorrow|tonight|next week|next month|every day|every week|in \d+ (?:minutes?|hours?|days?))\b/,
+  );
+  const wantsGatewayTools = promptMentions(
+    normalizedPrompt,
+    /\b(restart|reload|gateway|runtime|openclaw|apply config|update config|reconfigure)\b/,
+  );
+  const wantsSessionTools = promptMentions(
+    normalizedPrompt,
+    /\b(session|history|subagent|sub-agent|what model are we using|model are we using|usage|time spent)\b/,
+  );
+  const wantsDeviceTools = promptMentions(
+    normalizedPrompt,
+    /\b(node|device|camera|screen|desktop notification|desktop notify)\b/,
+  );
+  const wantsCanvasTools = promptMentions(
+    normalizedPrompt,
+    /\b(canvas|preview|render|evaluate|snapshot)\b/,
+  );
+
+  const allowlist = new Set<string>();
+  if (wantsWorkspaceTools) {
+    for (const toolName of LOCAL_MANAGED_LIGHTWEIGHT_WORKSPACE_TOOLS) {
+      allowlist.add(toolName);
+    }
+  }
+  if (wantsWebContext) {
+    for (const toolName of LOCAL_MANAGED_LIGHTWEIGHT_WEB_FETCH_TOOLS) {
+      allowlist.add(toolName);
+    }
+    if (hasSearch) {
+      for (const toolName of LOCAL_MANAGED_LIGHTWEIGHT_WEB_SEARCH_TOOLS) {
+        allowlist.add(toolName);
+      }
+    } else {
+      for (const toolName of LOCAL_MANAGED_LIGHTWEIGHT_BROWSER_TOOLS) {
+        allowlist.add(toolName);
+      }
+    }
+  }
+  if (wantsBrowser) {
+    for (const toolName of LOCAL_MANAGED_LIGHTWEIGHT_BROWSER_TOOLS) {
+      allowlist.add(toolName);
+    }
+  }
+  if (wantsMessageTools) {
+    for (const toolName of LOCAL_MANAGED_LIGHTWEIGHT_MESSAGE_TOOLS) {
+      allowlist.add(toolName);
+    }
+  }
+  if (wantsScheduleTools) {
+    for (const toolName of LOCAL_MANAGED_LIGHTWEIGHT_SCHEDULE_TOOLS) {
+      allowlist.add(toolName);
+    }
+  }
+  if (wantsGatewayTools) {
+    for (const toolName of LOCAL_MANAGED_LIGHTWEIGHT_GATEWAY_TOOLS) {
+      allowlist.add(toolName);
+    }
+  }
+  if (wantsSessionTools) {
+    for (const toolName of LOCAL_MANAGED_LIGHTWEIGHT_SESSION_TOOLS) {
+      allowlist.add(toolName);
+    }
+  }
+  if (wantsDeviceTools) {
+    for (const toolName of LOCAL_MANAGED_LIGHTWEIGHT_DEVICE_TOOLS) {
+      allowlist.add(toolName);
+    }
+  }
+  if (wantsCanvasTools) {
+    for (const toolName of LOCAL_MANAGED_LIGHTWEIGHT_CANVAS_TOOLS) {
+      allowlist.add(toolName);
+    }
+  }
+
+  return allowlist;
+}
+
+export function filterToolsForManagedLocalLightweight<T extends { name: string }>(
+  tools: T[],
+  params: {
+    provider?: string;
+    bootstrapContextMode?: "full" | "lightweight";
+    config?: OpenClawConfig;
+    prompt?: string;
+  },
+): T[] {
+  if (params.bootstrapContextMode !== "lightweight") {
+    return tools;
+  }
+  if ((params.provider || "").trim().toLowerCase() !== "rnn") {
+    return tools;
+  }
+
+  const allowlist = resolveManagedLocalLightweightToolAllowlist({
+    prompt: params.prompt,
+    config: params.config,
+  });
+  return tools.filter((tool) => allowlist.has(tool.name));
+}
+
 export function resolveAttemptFsWorkspaceOnly(params: {
   config?: OpenClawConfig;
   sessionAgentId: string;
@@ -1557,8 +1777,16 @@ export async function runEmbeddedAttempt(
           },
         });
     const toolsEnabled = supportsModelTools(params.model);
+    const filteredToolsRaw = toolsEnabled
+      ? filterToolsForManagedLocalLightweight(toolsRaw, {
+          provider: params.provider,
+          bootstrapContextMode: params.bootstrapContextMode,
+          config: params.config,
+          prompt: params.prompt,
+        })
+      : [];
     const tools = sanitizeToolsForGoogle({
-      tools: toolsEnabled ? toolsRaw : [],
+      tools: filteredToolsRaw,
       provider: params.provider,
     });
     const clientTools = toolsEnabled ? params.clientTools : undefined;

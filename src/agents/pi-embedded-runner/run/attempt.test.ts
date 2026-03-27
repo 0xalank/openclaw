@@ -4,6 +4,8 @@ import { resolveOllamaBaseUrlForRun } from "../../ollama-stream.js";
 import {
   buildAfterTurnRuntimeContext,
   composeSystemPromptWithHookContext,
+  filterToolsForManagedLocalLightweight,
+  hasConfiguredWebSearchForManagedLocal,
   isOllamaCompatProvider,
   prependSystemPromptAddition,
   resolveAttemptFsWorkspaceOnly,
@@ -207,6 +209,147 @@ describe("resolvePromptModeForAttempt", () => {
         bootstrapContextMode: "full",
       }),
     ).toBe("minimal");
+  });
+});
+
+describe("filterToolsForManagedLocalLightweight", () => {
+  it("routes coding prompts to workspace tools", () => {
+    const filtered = filterToolsForManagedLocalLightweight(
+      [
+        { name: "read" },
+        { name: "write" },
+        { name: "web_search" },
+        { name: "web_fetch" },
+        { name: "browser" },
+        { name: "message" },
+        { name: "gateway" },
+      ],
+      {
+        provider: "rnn",
+        bootstrapContextMode: "lightweight",
+        prompt: "Please read README.md and edit the build script.",
+        config: {
+          tools: {
+            web: {
+              search: {
+                provider: "brave",
+                apiKey: "test-brave-key",
+              },
+            },
+          },
+        },
+      },
+    );
+
+    expect(filtered.map((tool) => tool.name)).toEqual(["read", "write"]);
+  });
+
+  it("routes live web queries to browser + fetch when search is not configured", () => {
+    const filtered = filterToolsForManagedLocalLightweight(
+      [{ name: "web_search" }, { name: "web_fetch" }, { name: "browser" }, { name: "read" }],
+      {
+        provider: "rnn",
+        bootstrapContextMode: "lightweight",
+        prompt: "What is the weather in Austin today?",
+        config: {
+          tools: {
+            web: {
+              search: {
+                provider: "brave",
+              },
+            },
+          },
+        },
+      },
+    );
+
+    expect(filtered.map((tool) => tool.name)).toEqual(["web_fetch", "browser"]);
+  });
+
+  it("routes live web queries to search + fetch when search is configured", () => {
+    const filtered = filterToolsForManagedLocalLightweight(
+      [{ name: "web_search" }, { name: "web_fetch" }, { name: "browser" }, { name: "read" }],
+      {
+        provider: "rnn",
+        bootstrapContextMode: "lightweight",
+        prompt: "Look up the latest weather in New York.",
+        config: {
+          tools: {
+            web: {
+              search: {
+                provider: "brave",
+                apiKey: "test-brave-key",
+              },
+            },
+          },
+        },
+      },
+    );
+
+    expect(filtered.map((tool) => tool.name)).toEqual(["web_search", "web_fetch"]);
+  });
+
+  it("routes messaging prompts to the message tool", () => {
+    const filtered = filterToolsForManagedLocalLightweight(
+      [{ name: "message" }, { name: "cron" }, { name: "read" }],
+      {
+        provider: "rnn",
+        bootstrapContextMode: "lightweight",
+        prompt: "Send a message to Alan on Telegram.",
+      },
+    );
+
+    expect(filtered.map((tool) => tool.name)).toEqual(["message"]);
+  });
+
+  it("returns no tools for plain chat prompts", () => {
+    const filtered = filterToolsForManagedLocalLightweight(
+      [{ name: "read" }, { name: "web_search" }, { name: "message" }],
+      {
+        provider: "rnn",
+        bootstrapContextMode: "lightweight",
+        prompt: "Hello there",
+      },
+    );
+
+    expect(filtered).toEqual([]);
+  });
+
+  it("does not filter non-managed or non-lightweight runs", () => {
+    const tools = [{ name: "read" }, { name: "message" }, { name: "gateway" }];
+
+    expect(
+      filterToolsForManagedLocalLightweight(tools, {
+        provider: "openrouter",
+        bootstrapContextMode: "lightweight",
+      }),
+    ).toEqual(tools);
+
+    expect(
+      filterToolsForManagedLocalLightweight(tools, {
+        provider: "rnn",
+        bootstrapContextMode: "full",
+      }),
+    ).toEqual(tools);
+  });
+});
+
+describe("hasConfiguredWebSearchForManagedLocal", () => {
+  it("detects provider-specific keys", () => {
+    expect(
+      hasConfiguredWebSearchForManagedLocal({
+        tools: {
+          web: {
+            search: {
+              provider: "gemini",
+              gemini: {
+                apiKey: "gemini-key",
+              },
+            },
+          },
+        },
+      }),
+    ).toBe(true);
   });
 });
 
