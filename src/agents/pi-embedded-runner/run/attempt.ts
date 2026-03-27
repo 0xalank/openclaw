@@ -29,6 +29,7 @@ import type {
   PluginHookBeforePromptBuildResult,
 } from "../../../plugins/types.js";
 import { isCronSessionKey, isSubagentSessionKey } from "../../../routing/session-key.js";
+import { extractTextFromChatContent } from "../../../shared/chat-content.js";
 import { joinPresentTextSegments } from "../../../shared/text/join-segments.js";
 import { buildTtsSystemPromptHint } from "../../../tts/tts.js";
 import { resolveUserPath } from "../../../utils.js";
@@ -1253,6 +1254,17 @@ export function resolvePromptModeForSession(sessionKey?: string): "minimal" | "f
   return isSubagentSessionKey(sessionKey) || isCronSessionKey(sessionKey) ? "minimal" : "full";
 }
 
+export function resolvePromptModeForAttempt(params: {
+  sessionKey?: string;
+  disableTools?: boolean;
+  bootstrapContextMode?: "full" | "lightweight";
+}): "minimal" | "full" {
+  if (params.bootstrapContextMode === "lightweight") {
+    return "minimal";
+  }
+  return resolvePromptModeForSession(params.sessionKey);
+}
+
 export function resolveAttemptFsWorkspaceOnly(params: {
   config?: OpenClawConfig;
   sessionAgentId: string;
@@ -1658,7 +1670,11 @@ export async function runEmbeddedAttempt(
       },
     });
     const isDefaultAgent = sessionAgentId === defaultAgentId;
-    const promptMode = resolvePromptModeForSession(params.sessionKey);
+    const promptMode = resolvePromptModeForAttempt({
+      sessionKey: params.sessionKey,
+      disableTools: params.disableTools,
+      bootstrapContextMode: params.bootstrapContextMode,
+    });
     const docsPath = await resolveOpenClawDocsPath({
       workspaceDir: effectiveWorkspace,
       argv1: process.argv[1],
@@ -2530,6 +2546,44 @@ export async function runEmbeddedAttempt(
               numCtx: params.model.contextWindow ?? null,
             },
           });
+
+          if (params.debugPromptCapture) {
+            const truncatePreview = (text: string, maxChars: number): string => {
+              const normalized = text.replace(/\s+/g, " ").trim();
+              if (normalized.length <= maxChars) {
+                return normalized;
+              }
+              return `${normalized.slice(0, Math.max(0, maxChars - 1))}…`;
+            };
+            const historyPreview = activeSession.messages
+              .slice(-4)
+              .map((message) => {
+                const text =
+                  extractTextFromChatContent((message as { content?: unknown }).content, {
+                    joinWith: " ",
+                  }) ?? "";
+                if (!text) {
+                  return null;
+                }
+                return `${message.role}: ${truncatePreview(text, 240)}`;
+              })
+              .filter((value): value is string => Boolean(value))
+              .join(" | ");
+
+            emitAgentEvent({
+              runId: params.runId,
+              stream: "diagnostic",
+              data: {
+                kind: "contextPreview",
+                sessionKey: params.sessionKey ?? params.sessionId,
+                provider: params.provider,
+                model: params.modelId,
+                systemPromptPreview: truncatePreview(systemPromptText ?? "", 1200),
+                promptPreview: truncatePreview(effectivePrompt, 1600),
+                historyPreview: truncatePreview(historyPreview, 1600),
+              },
+            });
+          }
 
           if (hookRunner?.hasHooks("llm_input")) {
             hookRunner

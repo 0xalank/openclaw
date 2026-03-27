@@ -3,7 +3,10 @@ import type { OpenClawConfig } from "../config/config.js";
 import {
   CONTEXT_WINDOW_HARD_MIN_TOKENS,
   CONTEXT_WINDOW_WARN_BELOW_TOKENS,
+  MANAGED_RNN_CONTEXT_WINDOW_HARD_MIN_TOKENS,
+  MANAGED_RNN_CONTEXT_WINDOW_WARN_BELOW_TOKENS,
   evaluateContextWindowGuard,
+  resolveContextWindowGuardThresholds,
   resolveContextWindowInfo,
 } from "./context-window-guard.js";
 
@@ -145,5 +148,12 @@ describe("context-window-guard", () => {
   it("exports thresholds as expected", () => {
     expect(CONTEXT_WINDOW_HARD_MIN_TOKENS).toBe(16_000);
     expect(CONTEXT_WINDOW_WARN_BELOW_TOKENS).toBe(32_000);
+  });
+
+  it("uses lower thresholds for managed rnn models", () => {
+    expect(resolveContextWindowGuardThresholds("rnn")).toEqual({
+      warnBelowTokens: MANAGED_RNN_CONTEXT_WINDOW_WARN_BELOW_TOKENS,
+      hardMinTokens: MANAGED_RNN_CONTEXT_WINDOW_HARD_MIN_TOKENS,
+    });
   });
 });

@@ -2,6 +2,8 @@ import type { OpenClawConfig } from "../config/config.js";
 
 export const CONTEXT_WINDOW_HARD_MIN_TOKENS = 16_000;
 export const CONTEXT_WINDOW_WARN_BELOW_TOKENS = 32_000;
+export const MANAGED_RNN_CONTEXT_WINDOW_HARD_MIN_TOKENS = 4_096;
+export const MANAGED_RNN_CONTEXT_WINDOW_WARN_BELOW_TOKENS = 8_192;
 
 export type ContextWindowSource = "model" | "modelsConfig" | "agentContextTokens" | "default";
 
@@ -53,6 +55,22 @@ export type ContextWindowGuardResult = ContextWindowInfo & {
   shouldWarn: boolean;
   shouldBlock: boolean;
 };
+
+export function resolveContextWindowGuardThresholds(provider: string): {
+  warnBelowTokens: number;
+  hardMinTokens: number;
+} {
+  if (provider.trim().toLowerCase() === "rnn") {
+    return {
+      warnBelowTokens: MANAGED_RNN_CONTEXT_WINDOW_WARN_BELOW_TOKENS,
+      hardMinTokens: MANAGED_RNN_CONTEXT_WINDOW_HARD_MIN_TOKENS,
+    };
+  }
+  return {
+    warnBelowTokens: CONTEXT_WINDOW_WARN_BELOW_TOKENS,
+    hardMinTokens: CONTEXT_WINDOW_HARD_MIN_TOKENS,
+  };
+}
 
 export function evaluateContextWindowGuard(params: {
   info: ContextWindowInfo;

@@ -76,6 +76,8 @@ export type RunEmbeddedPiAgentParams = {
   clientTools?: ClientToolDefinition[];
   /** Disable built-in tools for this run (LLM-only mode). */
   disableTools?: boolean;
+  /** Emit truncated system/prompt previews in diagnostics for debugging. */
+  debugPromptCapture?: boolean;
   provider?: string;
   model?: string;
   authProfileId?: string;

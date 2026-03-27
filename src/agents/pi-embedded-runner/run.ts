@@ -23,9 +23,8 @@ import {
   resolveProfilesUnavailableReason,
 } from "../auth-profiles.js";
 import {
-  CONTEXT_WINDOW_HARD_MIN_TOKENS,
-  CONTEXT_WINDOW_WARN_BELOW_TOKENS,
   evaluateContextWindowGuard,
+  resolveContextWindowGuardThresholds,
   resolveContextWindowInfo,
 } from "../context-window-guard.js";
 import { DEFAULT_CONTEXT_TOKENS, DEFAULT_MODEL, DEFAULT_PROVIDER } from "../defaults.js";
@@ -399,22 +398,23 @@ export async function runEmbeddedPiAgent(
         ctxInfo.tokens < (runtimeModel.contextWindow ?? Infinity)
           ? { ...runtimeModel, contextWindow: ctxInfo.tokens }
           : runtimeModel;
+      const contextWindowThresholds = resolveContextWindowGuardThresholds(provider);
       const ctxGuard = evaluateContextWindowGuard({
         info: ctxInfo,
-        warnBelowTokens: CONTEXT_WINDOW_WARN_BELOW_TOKENS,
-        hardMinTokens: CONTEXT_WINDOW_HARD_MIN_TOKENS,
+        warnBelowTokens: contextWindowThresholds.warnBelowTokens,
+        hardMinTokens: contextWindowThresholds.hardMinTokens,
       });
       if (ctxGuard.shouldWarn) {
         log.warn(
-          `low context window: ${provider}/${modelId} ctx=${ctxGuard.tokens} (warn<${CONTEXT_WINDOW_WARN_BELOW_TOKENS}) source=${ctxGuard.source}`,
+          `low context window: ${provider}/${modelId} ctx=${ctxGuard.tokens} (warn<${contextWindowThresholds.warnBelowTokens}) source=${ctxGuard.source}`,
         );
       }
       if (ctxGuard.shouldBlock) {
         log.error(
-          `blocked model (context window too small): ${provider}/${modelId} ctx=${ctxGuard.tokens} (min=${CONTEXT_WINDOW_HARD_MIN_TOKENS}) source=${ctxGuard.source}`,
+          `blocked model (context window too small): ${provider}/${modelId} ctx=${ctxGuard.tokens} (min=${contextWindowThresholds.hardMinTokens}) source=${ctxGuard.source}`,
         );
         throw new FailoverError(
-          `Model context window too small (${ctxGuard.tokens} tokens). Minimum is ${CONTEXT_WINDOW_HARD_MIN_TOKENS}.`,
+          `Model context window too small (${ctxGuard.tokens} tokens). Minimum is ${contextWindowThresholds.hardMinTokens}.`,
           { reason: "unknown", provider, model: modelId },
         );
       }
@@ -960,6 +960,7 @@ export async function runEmbeddedPiAgent(
             prompt,
             images: params.images,
             disableTools: params.disableTools,
+            debugPromptCapture: params.debugPromptCapture,
             provider,
             modelId,
             model: applyLocalNoAuthHeaderOverride(effectiveModel, apiKeyInfo),
@@ -996,6 +997,7 @@ export async function runEmbeddedPiAgent(
             streamParams: params.streamParams,
             ownerNumbers: params.ownerNumbers,
             enforceFinalTag: params.enforceFinalTag,
+            bootstrapContextMode: params.bootstrapContextMode,
             bootstrapPromptWarningSignaturesSeen,
             bootstrapPromptWarningSignature:
               bootstrapPromptWarningSignaturesSeen[bootstrapPromptWarningSignaturesSeen.length - 1],

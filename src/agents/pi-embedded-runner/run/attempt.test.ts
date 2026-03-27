@@ -8,6 +8,7 @@ import {
   prependSystemPromptAddition,
   resolveAttemptFsWorkspaceOnly,
   resolveOllamaCompatNumCtxEnabled,
+  resolvePromptModeForAttempt,
   resolvePromptBuildHookResult,
   resolvePromptModeForSession,
   shouldInjectOllamaCompatNumCtx,
@@ -178,6 +179,34 @@ describe("resolvePromptModeForSession", () => {
     expect(resolvePromptModeForSession(undefined)).toBe("full");
     expect(resolvePromptModeForSession("agent:main")).toBe("full");
     expect(resolvePromptModeForSession("agent:main:thread:abc")).toBe("full");
+  });
+});
+
+describe("resolvePromptModeForAttempt", () => {
+  it("uses minimal mode for lightweight local chats", () => {
+    expect(
+      resolvePromptModeForAttempt({
+        sessionKey: "agent:main",
+        bootstrapContextMode: "lightweight",
+      }),
+    ).toBe("minimal");
+    expect(
+      resolvePromptModeForAttempt({
+        sessionKey: "agent:main",
+        disableTools: false,
+        bootstrapContextMode: "lightweight",
+      }),
+    ).toBe("minimal");
+  });
+
+  it("falls back to the session-derived mode otherwise", () => {
+    expect(
+      resolvePromptModeForAttempt({
+        sessionKey: "agent:main:subagent:child",
+        disableTools: false,
+        bootstrapContextMode: "full",
+      }),
+    ).toBe("minimal");
   });
 });
 

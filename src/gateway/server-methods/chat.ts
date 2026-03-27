@@ -1120,6 +1120,7 @@ export const chatHandlers: GatewayRequestHandlers = {
       message: string;
       thinking?: string;
       disableTools?: boolean;
+      debugPromptCapture?: boolean;
       bootstrapContextMode?: "full" | "lightweight";
       deliver?: boolean;
       attachments?: Array<{
@@ -1347,6 +1348,7 @@ export const chatHandlers: GatewayRequestHandlers = {
           runId: clientRunId,
           abortSignal: abortController.signal,
           disableTools: p.disableTools === true,
+          debugPromptCapture: p.debugPromptCapture === true,
           bootstrapContextMode: p.bootstrapContextMode,
           images: parsedImages.length > 0 ? parsedImages : undefined,
           onAgentRunStart: (runId) => {

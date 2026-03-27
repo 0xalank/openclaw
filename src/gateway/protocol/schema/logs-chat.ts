@@ -37,6 +37,7 @@ export const ChatSendParamsSchema = Type.Object(
     message: Type.String(),
     thinking: Type.Optional(Type.String()),
     disableTools: Type.Optional(Type.Boolean()),
+    debugPromptCapture: Type.Optional(Type.Boolean()),
     bootstrapContextMode: Type.Optional(
       Type.Union([Type.Literal("full"), Type.Literal("lightweight")]),
     ),
